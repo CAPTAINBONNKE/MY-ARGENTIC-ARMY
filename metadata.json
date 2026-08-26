@@ -1,0 +1,7 @@
+{
+  "name": "J.A.R.V.I.S. Android AI Agent OS",
+  "description": "Iron Man J.A.R.V.I.S. style Holographic Tactical OS & Android AI Agent featuring Arc Reactor HUD, Kotlin ReAct Orchestrator, Google Keep 50-Agent Army Swarm, 7 Hardware Subsystems, and Dual-Tier LLM Matrix.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
