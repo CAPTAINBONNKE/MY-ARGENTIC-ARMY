@@ -1,8 +1,29 @@
+# Dependencies
 node_modules/
-build/
+
+# Production build outputs
 dist/
+build/
 coverage/
+
+# System & temporary logs
 .DS_Store
 *.log
-.env*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and Secret Files (Strictly protected from GitHub)
+.env
+.env.*
 !.env.example
+*.local
+*.pem
+*.key
+*.cert
+*.pfx
+*.pkcs12
+*secret*
+*credentials*.json
+service-account*.json
+
