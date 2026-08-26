@@ -10,13 +10,15 @@ interface AndroidHeaderProps {
   setActiveTab: (tab: AndroidAppTab) => void;
   llmProvider: LLMProviderType;
   agentRunning: boolean;
+  isArmySyncActive?: boolean;
 }
 
 export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
   activeTab,
   setActiveTab,
   llmProvider,
-  agentRunning
+  agentRunning,
+  isArmySyncActive = false
 }) => {
   return (
     <header className="jarvis-panel border-b border-cyan-500/30 sticky top-0 z-40 px-4 py-2.5 shadow-2xl backdrop-blur-xl">
@@ -29,7 +31,7 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
         {/* Left: J.A.R.V.I.S. Core Brand & Hologram Indicator */}
         <div className="flex items-center gap-3">
           <div className="relative">
-            <ArcReactorCore isRunning={agentRunning} size="sm" />
+            <ArcReactorCore isRunning={agentRunning} isArmySyncActive={isArmySyncActive} size="sm" />
           </div>
 
           <div>
@@ -42,6 +44,12 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                 STARK_MARK_85
               </span>
+              {isArmySyncActive && (
+                <span className="text-[10px] bg-purple-950/90 text-purple-300 font-mono px-2 py-0.5 rounded border border-purple-500/60 flex items-center gap-1 shadow-[0_0_10px_rgba(168,85,247,0.5)] animate-pulse">
+                  <Sparkles className="w-3 h-3 text-purple-300 animate-spin" />
+                  <span>ARMY_SYNC_ACTIVE</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-cyan-400/70">
               TACTICAL AGENT DAEMON • 7 HARDWARE SUBSYSTEMS • 50-SWARM KEEP MATRIX

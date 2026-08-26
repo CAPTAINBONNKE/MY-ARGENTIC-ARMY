@@ -40,6 +40,7 @@ export default function App() {
   const [isCharging, setIsCharging] = useState<boolean>(false);
   const [llmProvider, setLlmProvider] = useState<LLMProviderType>('hybrid');
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
+  const [isArmySyncActive, setIsArmySyncActive] = useState<boolean>(false);
   const [currentSession, setCurrentSession] = useState<AgentExecutionSession | null>(null);
   const [isInspectingAccessibility, setIsInspectingAccessibility] = useState<boolean>(false);
 
@@ -91,6 +92,7 @@ export default function App() {
 
   // Trigger Agent Army automated sync to Google Keep
   const handleTriggerAgentArmySync = async (prompt?: string) => {
+    setIsArmySyncActive(true);
     const promptText = prompt || 'Generate Q3 Mobile Agent Strategy and task checklist';
     try {
       const res = await fetch('/api/android/keep/agent-army-sync', {
@@ -109,6 +111,8 @@ export default function App() {
       }
     } catch (e) {
       console.error('Agent army sync error:', e);
+    } finally {
+      setIsArmySyncActive(false);
     }
   };
 
@@ -270,6 +274,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         llmProvider={llmProvider}
         agentRunning={isAgentRunning}
+        isArmySyncActive={isArmySyncActive}
       />
 
       {/* Main Tactical Viewport */}
@@ -306,6 +311,7 @@ export default function App() {
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
                 onTriggerAgentArmySync={handleTriggerAgentArmySync}
+                onReorderNotes={(reordered) => setNotes(reordered)}
                 flashlight={flashlight}
                 onToggleFlashlight={setFlashlight}
                 onTriggerAgentPrompt={(p) => handleExecutePrompt(p, llmProvider)}

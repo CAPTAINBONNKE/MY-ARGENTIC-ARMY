@@ -58,6 +58,7 @@ interface AndroidPhoneFrameProps {
   onUpdateNote?: (id: string, updates: Partial<KeepNoteItem>) => void;
   onDeleteNote?: (id: string) => void;
   onTriggerAgentArmySync?: (prompt?: string) => Promise<void>;
+  onReorderNotes?: (notes: KeepNoteItem[]) => void;
   flashlight: boolean;
   onToggleFlashlight: (val: boolean) => void;
   onTriggerAgentPrompt?: (prompt: string) => void;
@@ -81,6 +82,7 @@ export const AndroidPhoneFrame: React.FC<AndroidPhoneFrameProps> = ({
   onUpdateNote = () => {},
   onDeleteNote = () => {},
   onTriggerAgentArmySync,
+  onReorderNotes,
   flashlight,
   onToggleFlashlight,
   onTriggerAgentPrompt,
@@ -617,6 +619,7 @@ export const AndroidPhoneFrame: React.FC<AndroidPhoneFrameProps> = ({
                       onUpdateNote={onUpdateNote}
                       onDeleteNote={onDeleteNote}
                       onTriggerAgentArmySync={onTriggerAgentArmySync}
+                      onReorderNotes={onReorderNotes}
                       isAgentRunning={agentStatus === 'running' || agentStatus === 'thinking'}
                     />
                   )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -14,7 +14,10 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  Mic,
+  MicOff,
+  GripVertical
 } from 'lucide-react';
 import { KeepNoteItem } from '../../../types/androidAgent';
 
@@ -24,6 +27,7 @@ interface NotesAppProps {
   onUpdateNote: (id: string, updates: Partial<KeepNoteItem>) => void;
   onDeleteNote: (id: string) => void;
   onTriggerAgentArmySync?: (prompt?: string) => Promise<void>;
+  onReorderNotes?: (notes: KeepNoteItem[]) => void;
   isAgentRunning?: boolean;
 }
 
@@ -33,6 +37,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
   onUpdateNote,
   onDeleteNote,
   onTriggerAgentArmySync,
+  onReorderNotes,
   isAgentRunning = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,6 +52,12 @@ export const NotesApp: React.FC<NotesAppProps> = ({
   const [showAgentArmySyncModal, setShowAgentArmySyncModal] = useState(false);
   const [customArmyPrompt, setCustomArmyPrompt] = useState('');
   const [isSyncingArmy, setIsSyncingArmy] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  // Drag and Drop state for pinned notes reordering
+  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
+  const [dragOverNoteId, setDragOverNoteId] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Color mappings for Google Keep style cards
   const colorStyles: Record<string, { bg: string; border: string; badge: string; dot: string }> = {
@@ -119,6 +130,12 @@ export const NotesApp: React.FC<NotesAppProps> = ({
     setNewChecklistItems([]);
     setNewChecklistText('');
     setIsCreating(false);
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      setIsListening(false);
+    }
   };
 
   const handleToggleChecklist = (noteId: string, itemId: string, currentDone: boolean) => {
@@ -148,6 +165,120 @@ export const NotesApp: React.FC<NotesAppProps> = ({
     }
   };
 
+  // Voice Dictation Toggle Handler for Note Content
+  const toggleSpeechDictation = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognitionClass) {
+      try {
+        const recognition = new SpeechRecognitionClass();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setIsListening(true);
+        };
+
+        recognition.onresult = (event: any) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          if (transcript.trim()) {
+            setNewContent((prev) => (prev ? `${prev.trim()} ${transcript.trim()}` : transcript.trim()));
+          }
+        };
+
+        recognition.onerror = () => {
+          setIsListening(false);
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch {
+        simulateDictation();
+      }
+    } else {
+      simulateDictation();
+    }
+  };
+
+  const simulateDictation = () => {
+    setIsListening(true);
+    const sampleVoiceInputs = [
+      'Tactical directive: Agent Army deploy and synchronize Keep matrix with zero-billing safeguards.',
+      'Sprint milestone: Verify Kotlin ReAct Orchestrator loop and accessibility touch bridges.',
+      'Intelligence brief: Benchmark on-device SLM models vs Cloud Gemini 3.7 Flash.'
+    ];
+    const chosen = sampleVoiceInputs[Math.floor(Math.random() * sampleVoiceInputs.length)];
+    setTimeout(() => {
+      setNewContent((prev) => (prev ? `${prev.trim()}\n${chosen}` : chosen));
+      setIsListening(false);
+    }, 1800);
+  };
+
+  // HTML5 Drag and Drop Handlers for Pinned Notes Reordering
+  const handleDragStart = (e: React.DragEvent, noteId: string) => {
+    e.dataTransfer.setData('text/plain', noteId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedNoteId(noteId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetNoteId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedNoteId && draggedNoteId !== targetNoteId) {
+      setDragOverNoteId(targetNoteId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverNoteId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedNoteId(null);
+    setDragOverNoteId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetNoteId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain') || draggedNoteId;
+    setDragOverNoteId(null);
+    setDraggedNoteId(null);
+
+    if (!sourceId || sourceId === targetNoteId) return;
+
+    const currentNotes = [...notes];
+    const sourceIdx = currentNotes.findIndex((n) => n.id === sourceId);
+    const targetIdx = currentNotes.findIndex((n) => n.id === targetNoteId);
+
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const [movedNote] = currentNotes.splice(sourceIdx, 1);
+    currentNotes.splice(targetIdx, 0, movedNote);
+
+    if (onReorderNotes) {
+      onReorderNotes(currentNotes);
+    }
+  };
+
   // Filter notes
   const filteredNotes = notes.filter((note) => {
     const matchesSearch =
@@ -162,6 +293,8 @@ export const NotesApp: React.FC<NotesAppProps> = ({
     if (selectedFilter === 'pinned') return Boolean(note.pinned);
     return true;
   });
+
+  const isSyncInProgress = isSyncingArmy || isAgentRunning;
 
   return (
     <div id="app-notes-keep" className="flex flex-col h-full bg-slate-950 text-slate-100 select-none">
@@ -190,16 +323,17 @@ export const NotesApp: React.FC<NotesAppProps> = ({
             id="btn-army-keep-sync"
             onClick={() => setShowAgentArmySyncModal(true)}
             title="Request Agent Army to write note"
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-[10px] font-bold shadow transition-all"
+            disabled={isSyncInProgress}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-[10px] font-bold shadow transition-all disabled:opacity-80 cursor-pointer"
           >
-            <Sparkles className="w-3 h-3 text-purple-300" />
-            <span>Army Write</span>
+            <Sparkles className={`w-3.5 h-3.5 text-purple-300 ${isSyncInProgress ? 'animate-spin' : ''}`} />
+            <span>{isSyncInProgress ? 'Army Syncing...' : 'Army Write'}</span>
           </button>
 
           <button
             id="btn-keep-new-note"
             onClick={() => setIsCreating(!isCreating)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-[11px] font-bold shadow transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-[11px] font-bold shadow transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Note</span>
@@ -222,7 +356,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-2 text-slate-500 hover:text-slate-300"
+              className="absolute right-2 top-2 text-slate-500 hover:text-slate-300 cursor-pointer"
             >
               <X className="w-3 h-3" />
             </button>
@@ -233,7 +367,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
         <div className="flex items-center gap-1 text-[10px] overflow-x-auto no-scrollbar pb-0.5">
           <button
             onClick={() => setSelectedFilter('all')}
-            className={`px-2 py-0.5 rounded-full border transition-all ${
+            className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
               selectedFilter === 'all'
                 ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 font-bold'
                 : 'text-slate-400 border-slate-800 hover:bg-slate-900'
@@ -243,7 +377,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
           </button>
           <button
             onClick={() => setSelectedFilter('agent')}
-            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all ${
+            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
               selectedFilter === 'agent'
                 ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 font-bold'
                 : 'text-slate-400 border-slate-800 hover:bg-slate-900'
@@ -253,7 +387,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
           </button>
           <button
             onClick={() => setSelectedFilter('checklist')}
-            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all ${
+            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
               selectedFilter === 'checklist'
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
                 : 'text-slate-400 border-slate-800 hover:bg-slate-900'
@@ -263,7 +397,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
           </button>
           <button
             onClick={() => setSelectedFilter('pinned')}
-            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all ${
+            className={`px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
               selectedFilter === 'pinned'
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
                 : 'text-slate-400 border-slate-800 hover:bg-slate-900'
@@ -285,7 +419,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
               <button
                 onClick={() => setNewPinned(!newPinned)}
                 title={newPinned ? 'Pinned note' : 'Pin note'}
-                className={`p-1 rounded hover:bg-slate-800 transition-colors ${
+                className={`p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer ${
                   newPinned ? 'text-amber-400' : 'text-slate-500'
                 }`}
               >
@@ -293,7 +427,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
               </button>
               <button
                 onClick={() => setIsCreating(false)}
-                className="p-1 text-slate-500 hover:text-slate-300"
+                className="p-1 text-slate-500 hover:text-slate-300 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -309,14 +443,41 @@ export const NotesApp: React.FC<NotesAppProps> = ({
             className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-semibold focus:outline-none focus:border-yellow-500"
           />
 
-          <textarea
-            id="keep-create-content"
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            placeholder="Take a note..."
-            rows={2}
-            className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-yellow-500"
-          />
+          {/* Text Area with Dictation Microphone */}
+          <div className="relative">
+            <textarea
+              id="keep-create-content"
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              placeholder="Take a note..."
+              rows={3}
+              className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 pr-8 text-xs text-slate-100 focus:outline-none focus:border-yellow-500"
+            />
+            <button
+              type="button"
+              id="btn-keep-dictate-content"
+              onClick={toggleSpeechDictation}
+              title={isListening ? 'Stop dictation' : 'Dictate note content'}
+              className={`absolute right-2 bottom-2.5 p-1 rounded-md transition-all cursor-pointer ${
+                isListening
+                  ? 'bg-rose-500/30 text-rose-300 border border-rose-500/50 animate-pulse'
+                  : 'text-slate-400 hover:text-yellow-400 hover:bg-slate-800/80'
+              }`}
+            >
+              {isListening ? (
+                <MicOff className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              ) : (
+                <Mic className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          {isListening && (
+            <div className="flex items-center gap-1.5 text-[10px] text-rose-400 font-mono animate-pulse px-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+              <span>Listening to voice dictation... Speak now</span>
+            </div>
+          )}
 
           {/* Checklist addition */}
           <div className="space-y-1.5">
@@ -330,7 +491,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
                 </span>
                 <button
                   onClick={() => handleRemoveChecklistItem(idx)}
-                  className="text-slate-500 hover:text-rose-400"
+                  className="text-slate-500 hover:text-rose-400 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -349,7 +510,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
               <button
                 type="button"
                 onClick={handleAddChecklistItem}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded"
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded cursor-pointer"
               >
                 Add
               </button>
@@ -363,7 +524,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
                 <button
                   key={colorKey}
                   onClick={() => setNewColor(colorKey)}
-                  className={`w-4 h-4 rounded-full ${colorStyles[colorKey].dot} ${
+                  className={`w-4 h-4 rounded-full cursor-pointer ${colorStyles[colorKey].dot} ${
                     newColor === colorKey ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'
                   }`}
                 />
@@ -373,14 +534,14 @@ export const NotesApp: React.FC<NotesAppProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setIsCreating(false)}
-                className="px-2.5 py-1 text-xs text-slate-400 hover:text-white"
+                className="px-2.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 id="btn-keep-save-note"
                 onClick={handleSaveNote}
-                className="px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-lg text-xs shadow"
+                className="px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-lg text-xs shadow cursor-pointer"
               >
                 Save to Keep
               </button>
@@ -399,7 +560,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
             </span>
             <button
               onClick={() => setShowAgentArmySyncModal(false)}
-              className="text-slate-400 hover:text-slate-200"
+              className="text-slate-400 hover:text-slate-200 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -411,22 +572,22 @@ export const NotesApp: React.FC<NotesAppProps> = ({
           <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => handleExecuteArmySync('Generate Q3 Mobile Agent Strategy and task checklist')}
-              disabled={isSyncingArmy || isAgentRunning}
-              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg"
+              disabled={isSyncInProgress}
+              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg cursor-pointer"
             >
               📝 Q3 Strategy & Checklist
             </button>
             <button
               onClick={() => handleExecuteArmySync('Synthesize Security & Zero-Billing Audit for Agent Army')}
-              disabled={isSyncingArmy || isAgentRunning}
-              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg"
+              disabled={isSyncInProgress}
+              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg cursor-pointer"
             >
               🛡️ Security & Zero-Billing Audit
             </button>
             <button
               onClick={() => handleExecuteArmySync('Trending On-Device AI models and Kotlin integration tips')}
-              disabled={isSyncingArmy || isAgentRunning}
-              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg"
+              disabled={isSyncInProgress}
+              className="text-[10px] bg-slate-900 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 px-2 py-1 rounded-lg cursor-pointer"
             >
               💡 Tech Trends Brief
             </button>
@@ -442,10 +603,10 @@ export const NotesApp: React.FC<NotesAppProps> = ({
             />
             <button
               onClick={() => handleExecuteArmySync(customArmyPrompt || 'Generate Sprint Milestones')}
-              disabled={isSyncingArmy || isAgentRunning}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow"
+              disabled={isSyncInProgress}
+              className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow cursor-pointer"
             >
-              {isSyncingArmy ? (
+              {isSyncInProgress ? (
                 <RefreshCw className="w-3 h-3 animate-spin" />
               ) : (
                 <Sparkles className="w-3 h-3" />
@@ -467,7 +628,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
                 setSearchQuery('');
                 setSelectedFilter('all');
               }}
-              className="text-[11px] text-yellow-400 hover:underline"
+              className="text-[11px] text-yellow-400 hover:underline cursor-pointer"
             >
               Clear filters
             </button>
@@ -475,21 +636,45 @@ export const NotesApp: React.FC<NotesAppProps> = ({
         ) : (
           filteredNotes.map((note) => {
             const style = colorStyles[note.color || 'yellow'] || colorStyles.yellow;
+            const isDragging = draggedNoteId === note.id;
+            const isDragTarget = dragOverNoteId === note.id;
+
             return (
               <div
                 key={note.id}
-                className={`p-3 rounded-2xl border ${style.border} ${style.bg} transition-all duration-200 shadow-sm relative group`}
+                draggable={Boolean(note.pinned)}
+                onDragStart={(e) => handleDragStart(e, note.id)}
+                onDragOver={(e) => handleDragOver(e, note.id)}
+                onDragLeave={handleDragLeave}
+                onDragEnd={handleDragEnd}
+                onDrop={(e) => handleDrop(e, note.id)}
+                className={`p-3 rounded-2xl border transition-all duration-200 shadow-sm relative group ${style.border} ${style.bg} ${
+                  isDragging ? 'opacity-40 scale-95 border-dashed border-amber-400' : ''
+                } ${
+                  isDragTarget ? 'ring-2 ring-amber-400 border-amber-400 shadow-lg scale-[1.02]' : ''
+                } ${note.pinned ? 'cursor-grab active:cursor-grabbing' : ''}`}
               >
                 {/* Note Header */}
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <h4 className="text-xs font-bold text-slate-100 leading-snug flex-1">
-                    {note.title}
-                  </h4>
+                  <div className="flex items-center gap-1.5 flex-1 truncate">
+                    {note.pinned && (
+                      <span
+                        title="Drag to reorder pinned notes"
+                        className="text-amber-400/80 hover:text-amber-300 cursor-grab"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                    <h4 className="text-xs font-bold text-slate-100 leading-snug truncate">
+                      {note.title}
+                    </h4>
+                  </div>
+
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleTogglePin(note.id, note.pinned)}
-                      title={note.pinned ? 'Unpin' : 'Pin to top'}
-                      className={`p-1 rounded hover:bg-slate-800/60 transition-colors ${
+                      title={note.pinned ? 'Unpin' : 'Pin to top (enables drag-reorder)'}
+                      className={`p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer ${
                         note.pinned ? 'text-amber-400' : 'text-slate-500 opacity-0 group-hover:opacity-100'
                       }`}
                     >
@@ -498,7 +683,7 @@ export const NotesApp: React.FC<NotesAppProps> = ({
                     <button
                       onClick={() => onDeleteNote(note.id)}
                       title="Delete note"
-                      className="p-1 rounded text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="p-1 rounded text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -570,3 +755,4 @@ export const NotesApp: React.FC<NotesAppProps> = ({
     </div>
   );
 };
+
