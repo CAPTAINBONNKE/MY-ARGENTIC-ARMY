@@ -27,3 +27,8 @@ yarn-error.log*
 *credentials*.json
 service-account*.json
 
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
