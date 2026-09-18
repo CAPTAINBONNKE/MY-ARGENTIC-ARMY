@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AndroidHeader, AndroidAppTab } from './components/android/AndroidHeader';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AndroidHeader, OperatingMode, AppTab } from './components/android/AndroidHeader';
 import { AndroidPhoneFrame } from './components/android/AndroidPhoneFrame';
 import { AgentAssistantDrawer } from './components/android/AgentAssistantDrawer';
 import { KotlinCodebaseExplorer } from './components/android/KotlinCodebaseExplorer';
@@ -7,13 +7,29 @@ import { MemoryInspector } from './components/android/MemoryInspector';
 import { CapabilitiesSandbox } from './components/android/CapabilitiesSandbox';
 import { LLMBenchmarkPanel } from './components/android/LLMBenchmarkPanel';
 import { JarvisHudTelemetry } from './components/android/JarvisHudTelemetry';
+
+// 50-Agent Army Swarm Components
+import { CentralCommand } from './components/CentralCommand';
+import { SwarmOrchestrator } from './components/SwarmOrchestrator';
+import { TaskDelegationStudio } from './components/TaskDelegationStudio';
+import { ProtocolInspector } from './components/ProtocolInspector';
+import { ConsolidatedReports } from './components/ConsolidatedReports';
+import { PromptLab } from './components/PromptLab';
+import { ManifestHub } from './components/ManifestHub';
+import { AgentTerminal } from './components/AgentTerminal';
+import { AgentModal } from './components/AgentModal';
+
+// UI Primitives & Schemas
+import { ToastProvider, useToast } from './components/ui/Toast';
+import { NoteCreateSchema, NoteUpdateSchema, AndroidExecuteSchema } from './schemas/apiSchemas';
+import { AGENTS_DATA } from './data/agents';
 import {
   INITIAL_APPS,
   INITIAL_NOTIFICATIONS,
   INITIAL_FILES,
   INITIAL_LOCATION,
   INITIAL_MEMORY,
-  INITIAL_KEEP_NOTES
+  INITIAL_KEEP_NOTES,
 } from './data/androidInitialState';
 import {
   AndroidNotification,
@@ -22,13 +38,16 @@ import {
   DeviceMemory,
   AgentExecutionSession,
   LLMProviderType,
-  AccessibilityNode,
-  KeepNoteItem
+  KeepNoteItem,
 } from './types/androidAgent';
-import { Smartphone, Sparkles, Code, Brain, Layers, Cpu, Terminal, Shield } from 'lucide-react';
+import { AgentDefinition } from './types';
+import { Shield, Sparkles, Layers, Cpu } from 'lucide-react';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<AndroidAppTab>('mobile_agent');
+function AppContent() {
+  const { success, error, info } = useToast();
+
+  const [operatingMode, setOperatingMode] = useState<OperatingMode>('android_os');
+  const [activeTab, setActiveTab] = useState<AppTab>('mobile_agent');
   const [activePackage, setActivePackage] = useState<string>('com.google.android.apps.messaging');
   const [notifications, setNotifications] = useState<AndroidNotification[]>(INITIAL_NOTIFICATIONS);
   const [location, setLocation] = useState<DeviceLocation>(INITIAL_LOCATION);
@@ -44,54 +63,136 @@ export default function App() {
   const [currentSession, setCurrentSession] = useState<AgentExecutionSession | null>(null);
   const [isInspectingAccessibility, setIsInspectingAccessibility] = useState<boolean>(false);
 
-  // Note management helpers
-  const handleAddNote = (newNoteData: Partial<KeepNoteItem>) => {
+  // 50-Agent Army states
+  const [selectedAgentForTerminal, setSelectedAgentForTerminal] = useState<AgentDefinition>(AGENTS_DATA[0]);
+  const [selectedAgentForModal, setSelectedAgentForModal] = useState<AgentDefinition | null>(null);
+  const [missionReportData, setMissionReportData] = useState<{ title: string; objective: string; logs: any[] } | null>(null);
+
+  // Hydrate Keep Notes from SQLite Backend on mount
+  useEffect(() => {
+    fetch('/api/android/keep')
+      .then(r => r.json())
+      .then(data => {
+        if (data.notes && Array.isArray(data.notes) && data.notes.length > 0) {
+          setNotes(data.notes);
+        }
+      })
+      .catch(err => {
+        console.warn('Initial notes fetch failed, using memory fallback:', err);
+      });
+  }, []);
+
+  // ----------------------------------------------------
+  // Optimistic Note Handlers with Server Sync & Rollback
+  // ----------------------------------------------------
+  const handleAddNote = useCallback((newNoteData: Partial<KeepNoteItem>) => {
+    const tempId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const newNote: KeepNoteItem = {
-      id: `note_${Date.now()}`,
-      title: newNoteData.title || 'Untitled Note',
+      id: tempId,
+      title: newNoteData.title || 'Untitled Directive',
       content: newNoteData.content || '',
       updated: 'Just now',
       color: newNoteData.color || 'yellow',
       pinned: newNoteData.pinned || false,
-      tags: newNoteData.tags || ['Personal'],
+      tags: newNoteData.tags || ['Tactical'],
       checklist: newNoteData.checklist || [],
-      authorAgent: newNoteData.authorAgent
+      authorAgent: newNoteData.authorAgent,
     };
-    setNotes(prev => [newNote, ...prev]);
 
-    // Also sync to backend keep notes API in background
+    // Client-side Zod validation
+    const valResult = NoteCreateSchema.safeParse(newNote);
+    if (!valResult.success) {
+      error('Note Validation Failed', valResult.error.issues[0]?.message);
+      return;
+    }
+
+    // 1. Optimistic UI update
+    setNotes(prev => [newNote, ...prev]);
+    success('Note Created', `"${newNote.title}" saved to SQLite database.`);
+
+    // 2. Sync to Backend
     fetch('/api/android/keep', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newNote)
-    }).catch(err => console.error('Failed to sync note to API:', err));
-  };
+      body: JSON.stringify(newNote),
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData?.error?.message || 'Failed to persist note');
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.note?.id && data.note.id !== tempId) {
+          setNotes(prev => prev.map(n => n.id === tempId ? data.note : n));
+        }
+      })
+      .catch(err => {
+        // Rollback optimistic state
+        setNotes(prev => prev.filter(n => n.id !== tempId));
+        error('Note Creation Failed', err.message, () => handleAddNote(newNoteData));
+      });
+  }, [error, success]);
 
-  const handleUpdateNote = (id: string, updates: Partial<KeepNoteItem>) => {
+  const handleUpdateNote = useCallback((id: string, updates: Partial<KeepNoteItem>) => {
+    const previousNotes = notes;
+    const targetNote = notes.find(n => n.id === id);
+    if (!targetNote) return;
+
+    // 1. Optimistic UI update
     setNotes(prev =>
       prev.map(note =>
         note.id === id ? { ...note, ...updates, updated: 'Just now' } : note
       )
     );
 
-    // Sync update to backend keep notes API
+    // 2. Sync to Backend
     fetch(`/api/android/keep/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    }).catch(err => console.error('Failed to sync note update:', err));
-  };
+      body: JSON.stringify(updates),
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData?.error?.message || 'Failed to update note');
+        }
+      })
+      .catch(err => {
+        // Rollback
+        setNotes(previousNotes);
+        error('Note Update Failed', err.message, () => handleUpdateNote(id, updates));
+      });
+  }, [notes, error]);
 
-  const handleDeleteNote = (id: string) => {
+  const handleDeleteNote = useCallback((id: string) => {
+    const previousNotes = notes;
+    const deletedNote = notes.find(n => n.id === id);
+
+    // 1. Optimistic UI update
     setNotes(prev => prev.filter(n => n.id !== id));
+    info('Note Removed', deletedNote ? `"${deletedNote.title}" removed.` : undefined);
 
+    // 2. Sync to Backend
     fetch(`/api/android/keep/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error('Failed to delete note on API:', err));
-  };
+      method: 'DELETE',
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData?.error?.message || 'Failed to delete note');
+        }
+      })
+      .catch(err => {
+        // Rollback
+        setNotes(previousNotes);
+        error('Delete Failed', err.message, () => handleDeleteNote(id));
+      });
+  }, [notes, error, info]);
 
   // Trigger Agent Army automated sync to Google Keep
-  const handleTriggerAgentArmySync = async (prompt?: string) => {
+  const handleTriggerAgentArmySync = useCallback(async (prompt?: string) => {
     setIsArmySyncActive(true);
     const promptText = prompt || 'Generate Q3 Mobile Agent Strategy and task checklist';
     try {
@@ -101,85 +202,36 @@ export default function App() {
         body: JSON.stringify({
           prompt: promptText,
           agentCount: 50,
-          targetTag: 'AgentArmy'
-        })
+          targetTag: 'AgentArmy',
+        }),
       });
+
+      if (!res.ok) {
+        throw new Error(`Sync failed with code ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.note) {
         setNotes(prev => [data.note, ...prev.filter(n => n.id !== data.note.id)]);
         setActivePackage('com.google.android.keep');
+        success('Army Swarm Synchronized', `Generated checklist note from 50 specialist agents.`);
       }
-    } catch (e) {
-      console.error('Agent army sync error:', e);
+    } catch (e: any) {
+      error('Agent Army Sync Error', e.message, () => handleTriggerAgentArmySync(prompt));
     } finally {
       setIsArmySyncActive(false);
     }
-  };
-
-  // Battery update helper
-  const handleUpdateBattery = (level: number, charging: boolean = false) => {
-    setBatteryLevel(level);
-    setIsCharging(charging);
-    setMemory(prev => ({
-      ...prev,
-      workingMemory: {
-        ...prev.workingMemory,
-        batteryLevel: level,
-        isCharging: charging
-      }
-    }));
-  };
-
-  // App launcher helper
-  const handleLaunchApp = (packageName: string) => {
-    setActivePackage(packageName);
-    setMemory(prev => ({
-      ...prev,
-      workingMemory: {
-        ...prev.workingMemory,
-        activeAppPackage: packageName
-      }
-    }));
-  };
-
-  // Notification dismiss helper
-  const handleDismissNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Post notification helper
-  const handlePostNotification = (title: string, body: string) => {
-    const newNotif: AndroidNotification = {
-      id: `notif_${Date.now()}`,
-      packageName: 'com.android.agent',
-      appName: 'Android Agent OS',
-      title,
-      body,
-      timestamp: 'Just now',
-      iconName: 'Bell',
-      priority: 'HIGH'
-    };
-    setNotifications([newNotif, ...notifications]);
-  };
-
-  // Add long-term memory helper
-  const handleAddLongTermMemory = (key: string, value: string, category: any) => {
-    const newMem = {
-      id: `mem_${Date.now()}`,
-      key,
-      value,
-      category,
-      confidence: 0.99,
-      lastUpdated: new Date().toISOString().split('T')[0]
-    };
-    setMemory(prev => ({
-      ...prev,
-      longTermMemory: [newMem, ...prev.longTermMemory]
-    }));
-  };
+  }, [error, success]);
 
   // Execute user prompt through Android Kotlin ReAct Orchestrator API
-  const handleExecutePrompt = async (prompt: string, provider: LLMProviderType) => {
+  const handleExecutePrompt = useCallback(async (prompt: string, provider: LLMProviderType) => {
+    // Client-side Zod validation
+    const valResult = AndroidExecuteSchema.safeParse({ userPrompt: prompt, llmProvider: provider });
+    if (!valResult.success) {
+      error('Invalid Command', valResult.error.issues[0]?.message);
+      return;
+    }
+
     setIsAgentRunning(true);
     setIsInspectingAccessibility(false);
 
@@ -191,9 +243,9 @@ export default function App() {
         {
           role: 'user',
           content: prompt,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ],
     }));
 
     try {
@@ -211,10 +263,15 @@ export default function App() {
             flashlight,
             notificationsCount: notifications.length,
             notesCount: notes.length,
-            longTermMemory: memory.longTermMemory
-          }
-        })
+            longTermMemory: memory.longTermMemory,
+          },
+        }),
       });
+
+      if (!response.ok) {
+        const errJson = await response.json();
+        throw new Error(errJson?.error?.message || `Execution returned ${response.status}`);
+      }
 
       const sessionResult: AgentExecutionSession = await response.json();
       setCurrentSession(sessionResult);
@@ -254,22 +311,79 @@ export default function App() {
             {
               role: 'assistant',
               content: sessionResult.finalAnswer || '',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }
-          ]
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            },
+          ],
         }));
       }
+
+      success('Directive Executed', `Completed via ${sessionResult.modelName || 'ReAct Loop'} in ${sessionResult.totalDurationMs || 100}ms`);
     } catch (err: any) {
-      console.error('Execution error:', err);
+      error('Execution Failed', err.message, () => handleExecutePrompt(prompt, provider));
     } finally {
       setIsAgentRunning(false);
     }
+  }, [activePackage, location, memory, flashlight, notifications.length, notes.length, error, success]);
+
+  // Hardware helper callbacks
+  const handleUpdateBattery = (level: number, charging: boolean = false) => {
+    setBatteryLevel(level);
+    setIsCharging(charging);
+    setMemory(prev => ({
+      ...prev,
+      workingMemory: { ...prev.workingMemory, batteryLevel: level, isCharging: charging },
+    }));
+  };
+
+  const handleLaunchApp = (packageName: string) => {
+    setActivePackage(packageName);
+    setMemory(prev => ({
+      ...prev,
+      workingMemory: { ...prev.workingMemory, activeAppPackage: packageName },
+    }));
+  };
+
+  const handleDismissNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handlePostNotification = (title: string, body: string) => {
+    const newNotif: AndroidNotification = {
+      id: `notif_${Date.now()}`,
+      packageName: 'com.android.agent',
+      appName: 'Android Agent OS',
+      title,
+      body,
+      timestamp: 'Just now',
+      iconName: 'Bell',
+      priority: 'HIGH',
+    };
+    setNotifications([newNotif, ...notifications]);
+    info('Notification Posted', title);
+  };
+
+  const handleAddLongTermMemory = (key: string, value: string, category: any) => {
+    const newMem = {
+      id: `mem_${Date.now()}`,
+      key,
+      value,
+      category,
+      confidence: 0.99,
+      lastUpdated: new Date().toISOString().split('T')[0],
+    };
+    setMemory(prev => ({
+      ...prev,
+      longTermMemory: [newMem, ...prev.longTermMemory],
+    }));
+    success('Memory Persisted', `Key: "${key}" stored in Room DB cache.`);
   };
 
   return (
     <div className="min-h-screen jarvis-grid-bg text-cyan-100 flex flex-col selection:bg-cyan-400 selection:text-slate-950">
-      {/* Top J.A.R.V.I.S. HUD Navigation Header */}
+      {/* Top J.A.R.V.I.S. HUD Navigation Header with Mode Switcher */}
       <AndroidHeader
+        operatingMode={operatingMode}
+        setOperatingMode={setOperatingMode}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         llmProvider={llmProvider}
@@ -288,6 +402,10 @@ export default function App() {
           notificationsCount={notifications.length}
           activePackage={activePackage}
         />
+
+        {/* ==================================================== */}
+        {/* OPERATING MODE 1: ANDROID AGENT OS VIEWS            */}
+        {/* ==================================================== */}
 
         {/* Tab 1: Live Android Mobile Device & ReAct Agent Orchestrator */}
         {activeTab === 'mobile_agent' && (
@@ -343,10 +461,13 @@ export default function App() {
                     <Shield className="w-4 h-4 text-cyan-400" /> TACTICAL TOPOLOGY & DISPATCH MATRIX
                   </h3>
                   <button
-                    onClick={() => setActiveTab('kotlin_architecture')}
+                    onClick={() => {
+                      setOperatingMode('swarm_army');
+                      setActiveTab('swarm_command');
+                    }}
                     className="text-cyan-300 hover:text-white font-mono text-[11px] flex items-center gap-1 cursor-pointer"
                   >
-                    <span>VIEW KOTLIN SOURCE</span>
+                    <span>OPEN 50-AGENT SWARM COMMAND</span>
                     <span>→</span>
                   </button>
                 </div>
@@ -358,7 +479,7 @@ export default function App() {
                   </div>
                   <div className="p-2 rounded-lg bg-slate-950/80 border border-cyan-500/30">
                     <span className="text-[9px] text-cyan-300 font-hud font-bold block">2. DUAL LLM MATRIX</span>
-                    <span className="text-slate-300 font-sans text-[11px]">Gemini 2.5 + Edge NPU</span>
+                    <span className="text-slate-300 font-sans text-[11px]">Gemini 3.7 + Edge NPU</span>
                   </div>
                   <div className="p-2 rounded-lg bg-slate-950/80 border border-emerald-500/30">
                     <span className="text-[9px] text-emerald-300 font-hud font-bold block">3. 7 SUBSYSTEMS</span>
@@ -417,7 +538,120 @@ export default function App() {
             />
           </div>
         )}
+
+        {/* ==================================================== */}
+        {/* OPERATING MODE 2: 50-AGENT ARMY SWARM VIEWS          */}
+        {/* ==================================================== */}
+
+        {/* Swarm Command HQ */}
+        {activeTab === 'swarm_command' && (
+          <div className="flex-1 flex flex-col">
+            <CentralCommand
+              agents={AGENTS_DATA}
+              onSelectAgentForTerminal={(agent) => {
+                setSelectedAgentForTerminal(agent);
+                setActiveTab('agent_terminal');
+              }}
+              onNavigateToTab={(tab) => {
+                const tabMap: Record<string, AppTab> = {
+                  delegation: 'task_delegation',
+                  inspector: 'protocol_inspector',
+                  reports: 'consolidated_reports',
+                  terminal: 'agent_terminal',
+                  swarm: 'swarm_pipelines',
+                  prompt_lab: 'prompt_lab',
+                  manifest: 'manifest_hub',
+                };
+                setActiveTab(tabMap[tab] || 'swarm_command');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Multi-Agent Pipelines */}
+        {activeTab === 'swarm_pipelines' && (
+          <div className="flex-1 flex flex-col">
+            <SwarmOrchestrator agents={AGENTS_DATA} />
+          </div>
+        )}
+
+        {/* Task Delegation DAG Studio */}
+        {activeTab === 'task_delegation' && (
+          <div className="flex-1 flex flex-col">
+            <TaskDelegationStudio
+              agents={AGENTS_DATA}
+              onGenerateReport={(data) => {
+                setMissionReportData(data);
+                setActiveTab('consolidated_reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Protocol Bus Inspector */}
+        {activeTab === 'protocol_inspector' && (
+          <div className="flex-1 flex flex-col">
+            <ProtocolInspector agents={AGENTS_DATA} />
+          </div>
+        )}
+
+        {/* Consolidated Executive Reports */}
+        {activeTab === 'consolidated_reports' && (
+          <div className="flex-1 flex flex-col">
+            <ConsolidatedReports
+              agents={AGENTS_DATA}
+              initialReportData={missionReportData}
+            />
+          </div>
+        )}
+
+        {/* CLI Agent Terminal */}
+        {activeTab === 'agent_terminal' && (
+          <div className="flex-1 flex flex-col">
+            <AgentTerminal
+              agents={AGENTS_DATA}
+              selectedAgent={selectedAgentForTerminal}
+              onSelectAgent={setSelectedAgentForTerminal}
+            />
+          </div>
+        )}
+
+        {/* Prompt Optimization Lab */}
+        {activeTab === 'prompt_lab' && (
+          <div className="flex-1 flex flex-col">
+            <PromptLab />
+          </div>
+        )}
+
+        {/* Manifest Export Hub */}
+        {activeTab === 'manifest_hub' && (
+          <div className="flex-1 flex flex-col">
+            <ManifestHub agents={AGENTS_DATA} />
+          </div>
+        )}
       </main>
+
+      {/* Agent Modal Detail View */}
+      {selectedAgentForModal && (
+        <AgentModal
+          agent={selectedAgentForModal}
+          onClose={() => setSelectedAgentForModal(null)}
+          onLaunchTerminal={(agent) => {
+            setSelectedAgentForTerminal(agent);
+            setSelectedAgentForModal(null);
+            setOperatingMode('swarm_army');
+            setActiveTab('agent_terminal');
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
