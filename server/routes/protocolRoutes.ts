@@ -16,6 +16,8 @@ import {
 const router = Router();
 
 // Protocol & Telemetry inspection
+router.get('/dashboard', ProtocolController.getSummaryDashboard);
+router.get('/summary-dashboard', ProtocolController.getSummaryDashboard);
 router.get('/agents/telemetry', ProtocolController.getTelemetry);
 router.get('/messages', ProtocolController.getMessages);
 

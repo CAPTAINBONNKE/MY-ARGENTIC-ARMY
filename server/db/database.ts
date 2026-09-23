@@ -250,4 +250,95 @@ function seedInitialData(): void {
       Date.now()
     );
   }
+
+  // 5. Seed Initial Mission Reports if empty
+  const countReports = db.prepare('SELECT count(*) as count FROM mission_reports').get() as { count: number };
+  if (countReports.count === 0) {
+    const insertReport = db.prepare(`
+      INSERT INTO mission_reports (
+        report_id, mission_title, objective, timestamp, total_agents_involved,
+        total_execution_time_ms, total_tokens_used, efficiency_score, executive_summary,
+        deliverables_json, protocol_trace_json, audit_findings_json, recommendations_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const now = Date.now();
+    const initialReports = [
+      {
+        report_id: `rep_alpha_${now}`,
+        mission_title: 'Autonomous Multi-Tier Microservice Orchestration',
+        objective: 'Coordinate backend engineering, security audit, and API contract generation across 4 specialized agents.',
+        timestamp: new Date(now - 3600000 * 2).toISOString(),
+        total_agents_involved: 4,
+        total_execution_time_ms: 1240,
+        total_tokens_used: 3420,
+        efficiency_score: 97.4,
+        executive_summary: 'All 4 agent nodes finished within SLAs. Zero schema violations and full zero-billing guardrails maintained.',
+        deliverables_json: JSON.stringify([
+          { agentId: 4, roleName: 'Backend Core Specialist', category: 'engineering', taskTitle: 'REST Endpoints Spec', summary: 'Designed modular endpoints', latencyMs: 310, status: 'success' },
+          { agentId: 7, roleName: 'Security & Auth Guardian', category: 'engineering', taskTitle: 'Zod Security Audit', summary: 'Passed runtime validation rules', latencyMs: 290, status: 'success' },
+        ]),
+        protocol_trace_json: JSON.stringify([]),
+        audit_findings_json: JSON.stringify(['Zero-billing schema enforcement verified', 'Sub-millisecond WAL bus latency']),
+        recommendations_json: JSON.stringify(['Maintain SQLite WAL checkpoint at 1000 pages']),
+        created_at: now - 3600000 * 2,
+      },
+      {
+        report_id: `rep_beta_${now}`,
+        mission_title: 'Global Telemetry & Fleet Health Calibration',
+        objective: 'Execute full heartbeat sync across 50 agent nodes and verify ECC-256 signature traces.',
+        timestamp: new Date(now - 3600000 * 6).toISOString(),
+        total_agents_involved: 50,
+        total_execution_time_ms: 820,
+        total_tokens_used: 1980,
+        efficiency_score: 98.8,
+        executive_summary: '50-agent army responded with 100% liveness probe success. Mean latency dropped to 215ms.',
+        deliverables_json: JSON.stringify([
+          { agentId: 1, roleName: 'Command Dispatcher', category: 'SYSTEM', taskTitle: 'Fleet Liveness Probe', summary: 'All 50 nodes acknowledged', latencyMs: 215, status: 'success' },
+        ]),
+        protocol_trace_json: JSON.stringify([]),
+        audit_findings_json: JSON.stringify(['100% unit availability', 'No dropped packets on internal_bus']),
+        recommendations_json: JSON.stringify(['Schedule automated ping probes every 10 seconds']),
+        created_at: now - 3600000 * 6,
+      },
+      {
+        report_id: `rep_gamma_${now}`,
+        mission_title: 'Content & Visual Generation Pipeline',
+        objective: 'Synthesize product messaging pillars and generate UI responsive layout specifications.',
+        timestamp: new Date(now - 3600000 * 18).toISOString(),
+        total_agents_involved: 3,
+        total_execution_time_ms: 1450,
+        total_tokens_used: 4110,
+        efficiency_score: 95.2,
+        executive_summary: 'Pipeline concluded with structured JSON deliverables and verified token budgets.',
+        deliverables_json: JSON.stringify([
+          { agentId: 1, roleName: 'AI Content Strategist', category: 'content', taskTitle: 'Copy Architecture', summary: 'Brand pillars generated', latencyMs: 420, status: 'success' },
+          { agentId: 12, roleName: 'UI/UX Visual Architect', category: 'visual', taskTitle: 'Wireframe Layouts', summary: 'Design specs produced', latencyMs: 510, status: 'success' },
+        ]),
+        protocol_trace_json: JSON.stringify([]),
+        audit_findings_json: JSON.stringify(['Token budget utilization at 78% of max allocation']),
+        recommendations_json: JSON.stringify(['Cache recurrent prompt tokens to optimize response times']),
+        created_at: now - 3600000 * 18,
+      },
+    ];
+
+    initialReports.forEach(r => {
+      insertReport.run(
+        r.report_id,
+        r.mission_title,
+        r.objective,
+        r.timestamp,
+        r.total_agents_involved,
+        r.total_execution_time_ms,
+        r.total_tokens_used,
+        r.efficiency_score,
+        r.executive_summary,
+        r.deliverables_json,
+        r.protocol_trace_json,
+        r.audit_findings_json,
+        r.recommendations_json,
+        r.created_at
+      );
+    });
+  }
 }

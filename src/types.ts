@@ -238,3 +238,79 @@ export interface PipelineExecutionLog {
   durationMs?: number;
   error?: string;
 }
+
+// ----------------------------------------------------
+// Swarm Summary Dashboard Types
+// ----------------------------------------------------
+
+export interface ActiveAgentThread {
+  threadId: string;
+  agentId: number;
+  roleName: string;
+  category: AgentCategory;
+  status: AgentHealthStatus;
+  currentTask: string;
+  startedAt: string;
+  durationMs: number;
+  priority: PriorityLevel;
+  channel: string;
+  loadPercent: number;
+}
+
+export interface SwarmDashboardSubsystem {
+  id: string;
+  name: string;
+  status: 'healthy' | 'warning' | 'degraded';
+  metric: string;
+  details: string;
+}
+
+export interface RecentMissionItem {
+  reportId: string;
+  title: string;
+  objective: string;
+  agentsInvolved: number;
+  durationMs: number;
+  efficiencyScore: number;
+  timestamp: string;
+  status: 'success' | 'warning' | 'failed';
+}
+
+export interface SwarmDashboardData {
+  timestamp: string;
+  aggregateHealth: {
+    status: 'optimal' | 'good' | 'degraded';
+    overallHealthPercent: number;
+    nodesTotal: number;
+    nodesReady: number;
+    nodesExecuting: number;
+    nodesStandby: number;
+    nodesDegraded: number;
+    avgUptimePercent: number;
+    avgLatencyMs: number;
+    avgErrorRatePercent: number;
+    subsystems: SwarmDashboardSubsystem[];
+  };
+  missionCompletion: {
+    totalMissions: number;
+    totalTasksCompleted: number;
+    successRatePercent: number;
+    avgEfficiencyScore: number;
+    avgDurationMs: number;
+    priorityBreakdown: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+    };
+    recentMissions: RecentMissionItem[];
+  };
+  activeThreads: ActiveAgentThread[];
+  threadPool: {
+    totalThreads: number;
+    activeThreads: number;
+    idleThreads: number;
+    utilizationPercent: number;
+  };
+}
+

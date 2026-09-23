@@ -8,6 +8,7 @@ import {
 import { AgentIcon } from './AgentIcon';
 import { CATEGORIES_LIST } from '../data/agents';
 import { getCategoryBadgeStyle } from '../utils/formatters';
+import { SwarmSummaryDashboard } from './SwarmSummaryDashboard';
 import {
   Radio,
   Activity,
@@ -24,6 +25,8 @@ import {
   Filter,
   Eye,
   Sliders,
+  LayoutDashboard,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface CentralCommandProps {
@@ -37,6 +40,7 @@ export const CentralCommand: React.FC<CentralCommandProps> = ({
   onSelectAgentForTerminal,
   onNavigateToTab,
 }) => {
+  const [commandViewMode, setCommandViewMode] = useState<'dashboard' | 'operations' | 'all'>('all');
   const [telemetries, setTelemetries] = useState<AgentModuleTelemetry[]>([]);
   const [isLoadingTelemetry, setIsLoadingTelemetry] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -211,73 +215,81 @@ export const CentralCommand: React.FC<CentralCommandProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Top Telemetry KPI Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Active Modules
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-white font-mono">{activeCount || 50}</span>
-              <span className="text-xs text-emerald-400 font-semibold font-mono">/ 50 Online</span>
-            </div>
+      {/* Central Command View Mode Switcher Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-800 text-cyan-400">
+            <Radio className="w-4 h-4 animate-pulse" />
           </div>
-          <div className="p-3 bg-emerald-950/60 border border-emerald-800/50 rounded-xl text-emerald-400">
-            <Radio className="w-5 h-5 animate-pulse" />
+          <div>
+            <h2 className="text-xs sm:text-sm font-bold text-white font-mono uppercase tracking-wider">
+              Central Swarm Command & Orchestration
+            </h2>
+            <p className="text-[11px] text-slate-400">
+              Autonomous multi-agent execution, aggregate health surveillance, and thread pool orchestration.
+            </p>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Avg Protocol Latency
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-cyan-400 font-mono">{avgLatency}</span>
-              <span className="text-xs text-slate-400 font-mono">ms / roundtrip</span>
-            </div>
-          </div>
-          <div className="p-3 bg-cyan-950/60 border border-cyan-800/50 rounded-xl text-cyan-400">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Tasks Processed
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-indigo-400 font-mono">{totalCompleted || 1420}</span>
-              <span className="text-xs text-indigo-300 font-mono">+12/hr</span>
-            </div>
-          </div>
-          <div className="p-3 bg-indigo-950/60 border border-indigo-800/50 rounded-xl text-indigo-400">
-            <Zap className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Protocol Guardrails
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-sm font-bold text-emerald-400 font-mono">100% Zero-Billing</span>
-            </div>
-            <span className="text-[11px] text-slate-400">Strict Schema Enforced</span>
-          </div>
-          <div className="p-3 bg-emerald-950/60 border border-emerald-800/50 rounded-xl text-emerald-400">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
+        {/* View Switcher Tabs */}
+        <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl text-xs shrink-0">
+          <button
+            id="btn-view-dashboard"
+            type="button"
+            onClick={() => setCommandViewMode('dashboard')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer ${
+              commandViewMode === 'dashboard'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Summary Dashboard</span>
+          </button>
+          <button
+            id="btn-view-operations"
+            type="button"
+            onClick={() => setCommandViewMode('operations')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer ${
+              commandViewMode === 'operations'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Task Dispatcher</span>
+          </button>
+          <button
+            id="btn-view-all"
+            type="button"
+            onClick={() => setCommandViewMode('all')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer ${
+              commandViewMode === 'all'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>All Views</span>
+          </button>
         </div>
       </div>
 
-      {/* Control Action Center: Quick Dispatcher & Smart Capability Router */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Quick Protocol Task Dispatcher */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+      {/* High-Level Summary Dashboard */}
+      {(commandViewMode === 'dashboard' || commandViewMode === 'all') && (
+        <SwarmSummaryDashboard
+          agents={agents}
+          onSelectAgentForTerminal={onSelectAgentForTerminal}
+          onNavigateToTab={onNavigateToTab}
+        />
+      )}
+
+      {/* Operational Dispatcher & Modules Grid */}
+      {(commandViewMode === 'operations' || commandViewMode === 'all') && (
+        <>
+          {/* Control Action Center: Quick Dispatcher & Smart Capability Router */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Quick Protocol Task Dispatcher */}
+            <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-cyan-950 border border-cyan-800 text-cyan-400">
@@ -632,6 +644,8 @@ export const CentralCommand: React.FC<CentralCommandProps> = ({
           })}
         </div>
       </div>
+      </>
+      )}
 
       {/* Broadcast Signal Modal */}
       {showBroadcastModal && (
