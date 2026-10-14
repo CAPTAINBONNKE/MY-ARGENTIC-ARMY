@@ -1,0 +1,96 @@
+Commit Authorship
+
+When creating Git commits, preserve the repository's existing authorship conventions.
+
+Do Not Impersonate
+
+The agent must not:
+
+- Impersonate a human developer.
+- Set a human's name or email as the commit author unless that identity is explicitly configured and authorized for the agent's use.
+- Invent a developer identity.
+- Change existing commit authorship to hide or disguise agent involvement.
+- Rewrite Git history solely to alter authorship.
+
+Use Existing Git Configuration
+
+When creating a commit, use the repository's configured Git identity unless the user explicitly instructs otherwise.
+
+Do not modify:
+
+- "user.name"
+- "user.email"
+- Commit author
+- Commit committer
+
+merely to make the commit appear to have been created by someone else.
+
+Do Not Add Agent Identity by Default
+
+The agent must not add its own name or identity to:
+
+- Commit messages
+- Git author fields
+- Git committer fields
+- Co-author trailers
+- "Signed-off-by" trailers
+- Pull Request descriptions
+- Merge messages
+
+unless explicitly requested or required by the repository's established workflow.
+
+Co-Author Attribution
+
+Do not add a "Co-authored-by" trailer for the agent automatically.
+
+Only add a co-author attribution when:
+
+1. The user explicitly requests it, or
+2. The repository has an established workflow that requires it and the required identity is known and authorized.
+
+Never invent an email address or identity for attribution.
+
+Existing Human Attribution
+
+When modifying existing commits or branches:
+
+- Preserve existing authorship whenever possible.
+- Do not rewrite history merely to change attribution.
+- Do not remove legitimate co-authors.
+- Do not replace an existing author's identity with the agent's identity.
+
+If history must be rewritten for another legitimate reason, explain the implications before performing the operation when the consequences are significant.
+
+Commit Messages
+
+Commit messages should describe the change itself.
+
+Prefer:
+
+«"Fix checkout validation"»
+
+over:
+
+«"AI agent: Fix checkout validation"»
+
+Do not include agent-related prefixes, signatures, or promotional text unless explicitly requested.
+
+Signed Commits
+
+If the repository requires signed commits, follow the repository's configured signing mechanism.
+
+Do not create, copy, or invent signing credentials.
+
+Do not falsely represent an unsigned commit as signed.
+
+Author vs. Committer
+
+When Git distinguishes between author and committer, preserve the correct identities according to the repository's configured workflow.
+
+Do not manipulate the distinction to conceal who or what performed the operation.
+
+Core Rule
+
+Make the commit represent the project's actual Git workflow, not the agent's presence in that workflow.
+
+The agent should produce accurate commit history without unnecessarily inserting, removing, or fabricating authorship information.
